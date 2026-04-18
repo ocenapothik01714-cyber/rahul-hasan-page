@@ -1,0 +1,198 @@
+<h2>Social Media Automation — Full Feature Map</h2>
+<p class="subtitle">Everything you could build. Green = already working. Click modules you want to prioritize.</p>
+
+<style>
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+.module-card {
+  border: 2px solid #2a2a3e;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #16161e;
+}
+.module-card:hover { border-color: #7c6af7; background: #1e1e2e; }
+.module-card.selected { border-color: #7c6af7; background: #2a2040; }
+.module-card.done { border-color: #22c55e; }
+.module-card.done .mod-title { color: #22c55e; }
+.mod-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mod-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mod-features li {
+  font-size: 12px;
+  color: #9a9ab0;
+  padding: 3px 0;
+  border-bottom: 1px solid #2a2a3e;
+}
+.mod-features li:last-child { border-bottom: none; }
+.mod-features li.done-item { color: #22c55e; }
+.badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-done { background: #14532d; color: #22c55e; }
+.badge-new { background: #1e1b4b; color: #818cf8; }
+.badge-ig { background: #4a1942; color: #e879f9; }
+</style>
+
+<div class="module-grid">
+
+  <div class="module-card done" data-choice="comment_reply" onclick="toggleSelect(this)">
+    <div class="mod-title">💬 Comment Auto-Reply <span class="badge badge-done">Done</span></div>
+    <ul class="mod-features">
+      <li class="done-item">✓ Random reply from list</li>
+      <li class="done-item">✓ AI-generated reply (Groq)</li>
+      <li class="done-item">✓ Webhook + Polling modes</li>
+      <li class="done-item">✓ Skip own page comments</li>
+      <li>→ Keyword-based reply rules</li>
+      <li>→ Delay before replying (natural)</li>
+      <li>→ Per-post reply templates</li>
+    </ul>
+  </div>
+
+  <div class="module-card done" data-choice="inbox_reply" onclick="toggleSelect(this)">
+    <div class="mod-title">📩 Inbox Auto-Reply <span class="badge badge-done">Done</span></div>
+    <ul class="mod-features">
+      <li class="done-item">✓ AI reply to messages</li>
+      <li class="done-item">✓ DM to commenters</li>
+      <li class="done-item">✓ Polling + Webhook</li>
+      <li>→ Welcome message (first contact)</li>
+      <li>→ Away/office hours reply</li>
+      <li>→ Read receipt tracking</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="keyword_rules" onclick="toggleSelect(this)">
+    <div class="mod-title">🔑 Keyword Trigger Rules <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>IF comment/msg contains keyword → specific reply</li>
+      <li>Regex + exact match support</li>
+      <li>Multiple keywords per rule</li>
+      <li>Rule priority ordering</li>
+      <li>Assign tag/label to user on match</li>
+      <li>Trigger chatbot flow on match</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="chatbot_flow" onclick="toggleSelect(this)">
+    <div class="mod-title">🤖 Chatbot Flow Builder <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Button menus / Quick replies</li>
+      <li>Multi-step conversation flows</li>
+      <li>Collect user info (name, phone, email)</li>
+      <li>Persistent menu in Messenger</li>
+      <li>Welcome message for new subscribers</li>
+      <li>Postback handler</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="broadcast" onclick="toggleSelect(this)">
+    <div class="mod-title">📢 Broadcast System <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Send message to all subscribers</li>
+      <li>Segment by tag/label</li>
+      <li>Schedule broadcast (date/time)</li>
+      <li>Recurring broadcasts</li>
+      <li>Image / attachment support</li>
+      <li>Delivery & open rate tracking</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="lead_collector" onclick="toggleSelect(this)">
+    <div class="mod-title">🎯 Lead Collector <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Capture commenter info automatically</li>
+      <li>Keyword → collect lead flow</li>
+      <li>Store: name, PSID, timestamp, post</li>
+      <li>Tag/segment leads</li>
+      <li>Export to CSV</li>
+      <li>Opt-out management</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="post_scheduler" onclick="toggleSelect(this)">
+    <div class="mod-title">📅 Post Scheduler <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Schedule posts with image/video</li>
+      <li>Recurring post templates</li>
+      <li>Best-time suggestions</li>
+      <li>Draft queue</li>
+      <li>Post to multiple pages</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="comment_moderation" onclick="toggleSelect(this)">
+    <div class="mod-title">🛡️ Comment Moderation <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Auto-hide negative comments</li>
+      <li>Keyword blacklist → auto delete</li>
+      <li>Sentiment analysis filter</li>
+      <li>Spam detection</li>
+      <li>Auto-like own page comments</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="instagram" onclick="toggleSelect(this)">
+    <div class="mod-title">📸 Instagram Module <span class="badge badge-ig">Instagram</span></div>
+    <ul class="mod-features">
+      <li>Comment auto-reply (IG posts/reels)</li>
+      <li>DM auto-reply</li>
+      <li>Story reply automation</li>
+      <li>Keyword DM trigger from comments</li>
+      <li>IG + FB unified webhook</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="multi_page" onclick="toggleSelect(this)">
+    <div class="mod-title">🏢 Multi-Page Management <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Manage multiple FB/IG pages</li>
+      <li>Per-page config (rules, tone, language)</li>
+      <li>Unified dashboard</li>
+      <li>Token management</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="analytics" onclick="toggleSelect(this)">
+    <div class="mod-title">📊 Analytics & Reports <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Reply count & success rate</li>
+      <li>Subscriber growth chart</li>
+      <li>Most active posts/times</li>
+      <li>Keyword hit frequency</li>
+      <li>Lead conversion funnel</li>
+    </ul>
+  </div>
+
+  <div class="module-card" data-choice="web_dashboard" onclick="toggleSelect(this)">
+    <div class="mod-title">🖥️ Web Dashboard <span class="badge badge-new">New</span></div>
+    <ul class="mod-features">
+      <li>Configure all rules visually</li>
+      <li>View live conversation feed</li>
+      <li>Manage broadcasts & schedule</li>
+      <li>View leads & export</li>
+      <li>Analytics charts</li>
+    </ul>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:24px">Click the modules most important to you, then tell me in the terminal.</p>
