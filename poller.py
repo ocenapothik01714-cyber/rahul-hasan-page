@@ -12,8 +12,7 @@ import requests
 from datetime import datetime
 from config import PAGE_ACCESS_TOKEN, PAGE_ID
 from ai import (generate_comment_reply, generate_inbox_reply,
-                is_list_request, is_buy_request, detect_operator,
-                get_full_package_list, get_operator_package_list)
+                detect_operator, get_operator_package_list)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -158,12 +157,14 @@ def get_messages_in_conversation(conv_id):
 
 def check_inbox(reply=True):
     conversations = get_conversations()
+
+    # Collect latest unreplied message from each conversation
+    candidates = []
+    conv_messages_map = {}
     for conv in conversations:
         messages = get_messages_in_conversation(conv["id"])
-
-        # Find the latest unreplied user message (newest first)
-        latest_user_msg = None
-        for msg in reversed(messages):
+        conv_messages_map[conv["id"]] = messages
+        for msg in reversed(messages):  # newest first
             mid = msg.get("id")
             sender_id = msg.get("from", {}).get("id", "")
             if not mid or sender_id == PAGE_ID:
@@ -174,56 +175,51 @@ def check_inbox(reply=True):
             attachments = msg.get("attachments", {}).get("data", [])
             if not text and not attachments:
                 continue
-            latest_user_msg = msg
-            break  # take the newest only
+            candidates.append((msg, conv["id"]))
+            break  # one per conversation
 
-        if not latest_user_msg:
-            continue
+    if not candidates:
+        return
 
-        mid = latest_user_msg["id"]
-        sender_id = latest_user_msg.get("from", {}).get("id", "")
-        replied_messages.add(mid)
+    # Sort by created_time descending — process the most recent message first
+    candidates.sort(key=lambda x: x[0].get("created_time", ""), reverse=True)
+    latest_user_msg, conv_id = candidates[0]
+    messages = conv_messages_map[conv_id]
 
-        if not reply:
-            continue
+    mid = latest_user_msg["id"]
+    sender_id = latest_user_msg.get("from", {}).get("id", "")
+    replied_messages.add(mid)
 
-        user_text = latest_user_msg.get("message", "")
-        attachments = latest_user_msg.get("attachments", {}).get("data", [])
-        attach_types = {a.get("type", "") for a in attachments}
+    if not reply:
+        return
 
-        # Voice → ask for text
-        if "audio" in attach_types:
-            send_message(sender_id, "ভয়েস মেসেজ পড়তে পারি না। টেক্সটে লিখে পাঠান। 🙏")
-            break
+    user_text = latest_user_msg.get("message", "")
+    attachments = latest_user_msg.get("attachments", {}).get("data", [])
+    attach_types = {a.get("type", "") for a in attachments}
 
-        # Image only → ignore
-        if "image" in attach_types and not user_text:
-            break
+    # Voice → ask for text
+    if "audio" in attach_types:
+        send_message(sender_id, "ভয়েস মেসেজ পড়তে পারি না। টেক্সটে লিখে পাঠান। 🙏")
+        return
 
-        operator = detect_operator(user_text)
-        want_list = is_list_request(user_text)
-        want_buy  = is_buy_request(user_text)
+    # Image only → ignore
+    if "image" in attach_types and not user_text:
+        return
 
-        if want_list or want_buy:
-            if operator:
-                send_message(sender_id, get_operator_package_list(operator))
-            else:
-                send_message(sender_id,
-                    "কোন অপারেটরের প্যাকেজ দেখতে চান?\n"
-                    "Robi / Airtel / Banglalink / GP / Ryze / Skitto")
-        else:
-            # Build conversation history for context
-            history = []
-            for m in messages:
-                if m["id"] == mid:
-                    break
-                role = "assistant" if m.get("from", {}).get("id") == PAGE_ID else "user"
-                if m.get("message"):
-                    history.append({"role": role, "content": m["message"]})
-            ai_reply = generate_inbox_reply(user_text, history)
-            send_message(sender_id, ai_reply)
+    operator = detect_operator(user_text)
 
-        break  # one reply per poll cycle
+    if operator:
+        send_message(sender_id, get_operator_package_list(operator))
+    else:
+        history = []
+        for m in messages:
+            if m["id"] == mid:
+                break
+            role = "assistant" if m.get("from", {}).get("id") == PAGE_ID else "user"
+            if m.get("message"):
+                history.append({"role": role, "content": m["message"]})
+        ai_reply = generate_inbox_reply(user_text, history)
+        send_message(sender_id, ai_reply)
 
 
 # ─── Daily scheduled post ─────────────────────────────────────────────────────

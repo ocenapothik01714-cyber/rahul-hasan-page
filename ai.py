@@ -121,41 +121,6 @@ def detect_operator(text: str):
     return None
 
 
-def is_buy_request(text: str) -> bool:
-    keywords = [
-        "কিনতে চাই", "নিতে চাই", "কিনব", "নেব", "নিব", "কিনবো", "নিবো",
-        "অর্ডার", "order", "buy", "purchase",
-        "lagbe", "লাগবে", "দরকার", "নিতে চাইলে",
-    ]
-    text_lower = text.lower()
-    return any(kw in text_lower for kw in keywords)
-
-
-def is_list_request(text: str) -> bool:
-    keywords = [
-        # Bengali
-        "লিস্ট", "প্যাকেজ দেন", "প্যাকেজ দেখান", "প্যাকেজ কি কি", "সব প্যাকেজ",
-        "অফার লিস্ট", "অফার দেখান", "সব অফার", "অফার আছে", "কি অফার",
-        "কি কি আছে", "কী কী আছে", "দাম লিস্ট", "দাম কত", "দাম দেখান",
-        # Romanized Bengali
-        "ki offer", "koto dam", "dam koto", "offer ache", "ki ache",
-        "ki package", "package ache", "dekhan", "dekhao", "dam dao",
-        "ki ki ache", "offer dao", "package dao", "list dao",
-        # English
-        "offer list", "what offer", "package list", "price list",
-    ]
-    text_lower = text.lower()
-    return any(kw in text_lower for kw in keywords)
-
-
-def get_packages_text(operator_key=None) -> str:
-    """Return raw package text. If operator given, return only that one."""
-    pkgs = fetch_packages()
-    if operator_key and operator_key in pkgs:
-        return pkgs[operator_key]
-    # All operators
-    return "\n\n".join(f"{pkgs[k]}" for k in pkgs)
-
 
 # ─── System prompt ─────────────────────────────────────────────────────────────
 
@@ -168,10 +133,9 @@ BASE_PROMPT = """\
 
 নিয়ম:
 - সবসময় বাংলায় উত্তর দাও।
-- উত্তর সংক্ষিপ্ত রাখো, ২-৩ লাইনের বেশি নয়।
-- প্যাকেজের তথ্য শুধু দেওয়া তালিকা থেকে নাও — বানাবে না।
-- শুধু ডেটা/MB চাইলে → শুধু ডেটা প্যাক দেখাও। শুধু মিনিট চাইলে → শুধু মিনিট প্যাক। শুধু কম্বো চাইলে → শুধু কম্বো।
-- প্যাকেজ দেখানোর ফরম্যাট (প্রতিটি এক লাইনে): "X GB = XX টাকা" বা "X মিনিট = XX টাকা"
+- উত্তর ২-৩ লাইনের বেশি নয়।
+- কেউ নির্দিষ্ট প্যাকেজের দাম জিজ্ঞেস করলে (যেমন "60 GB কত?") → কথোপকথনের আগের তালিকা থেকে খুঁজে সঠিক দাম বলো।
+- তালিকায় না থাকলে বলো: "এই প্যাকেজটি এখন নেই।"
 - পেমেন্ট নম্বর শুধু কিনতে চাইলে দাও।
 - পেমেন্ট করেছে বললে: শেষ ৪ ডিজিট না থাকলে চাও → অফার নম্বর না থাকলে চাও → দুটো পেলে বলো "অপেক্ষা করুন, চালু করে দিব 🙏"
 - সমস্যা বা জোরাজুরি হলে বলো: "কল করুন: 01931112866"
@@ -187,10 +151,8 @@ COMMENT_PROMPT = """\
 - AI বা বট পরিচয় দেবে না। কোনো markdown ব্যবহার করবে না।"""
 
 
-def build_prompt(operator_key=None) -> str:
-    packages = get_packages_text(operator_key)
-    label = f"{operator_key} প্যাকেজ" if operator_key else "সব প্যাকেজ"
-    return BASE_PROMPT + f"\n\n== {label} ==\n{packages}"
+def build_prompt() -> str:
+    return BASE_PROMPT
 
 
 # ─── Shared chat with key/model rotation ──────────────────────────────────────
@@ -250,8 +212,7 @@ def generate_comment_reply(comment_text: str, post_text: str = "") -> str:
 
 
 def generate_inbox_reply(user_message: str, history: list = None) -> str:
-    operator = detect_operator(user_message)
-    messages = [{"role": "system", "content": build_prompt(operator)}]
+    messages = [{"role": "system", "content": build_prompt()}]
     if history:
         messages.extend(history[-4:])
     messages.append({"role": "user", "content": user_message})
@@ -260,10 +221,6 @@ def generate_inbox_reply(user_message: str, history: list = None) -> str:
     except Exception as e:
         logger.error("Groq inbox reply failed: %s", e)
         return "আপনার বার্তার জন্য ধন্যবাদ! আমরা শীঘ্রই উত্তর দেব। 🙏"
-
-
-def get_full_package_list() -> str:
-    return "আমাদের সর্বশেষ প্যাকেজ তালিকা:\n\n" + get_packages_text()
 
 
 def get_operator_package_list(operator_key: str) -> str:
