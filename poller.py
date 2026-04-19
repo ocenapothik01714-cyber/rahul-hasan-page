@@ -160,6 +160,16 @@ def get_messages_in_conversation(conv_id):
 def check_inbox(reply=True):
     conversations = get_conversations()
 
+    # Seeding mode: mark ALL existing user messages as seen so we never reply to old ones
+    if not reply:
+        for conv in conversations:
+            for msg in get_messages_in_conversation(conv["id"]):
+                mid = msg.get("id")
+                sender_id = msg.get("from", {}).get("id", "")
+                if mid and sender_id != PAGE_ID:
+                    replied_messages.add(mid)
+        return
+
     # Collect latest unreplied message from each conversation
     candidates = []
     conv_messages_map = {}
@@ -191,9 +201,6 @@ def check_inbox(reply=True):
     mid = latest_user_msg["id"]
     sender_id = latest_user_msg.get("from", {}).get("id", "")
     replied_messages.add(mid)
-
-    if not reply:
-        return
 
     user_text = latest_user_msg.get("message", "")
     attachments = latest_user_msg.get("attachments", {}).get("data", [])
