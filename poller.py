@@ -9,7 +9,9 @@ Usage:
 import time
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+BD_TZ = timedelta(hours=6)  # Bangladesh = UTC+6
 from config import PAGE_ACCESS_TOKEN, PAGE_ID
 from ai import (generate_comment_reply, generate_inbox_reply,
                 detect_operator, get_operator_package_list)
@@ -25,11 +27,11 @@ POLL_INTERVAL = 15  # seconds between each check
 
 # ── Daily auto-post schedule ───────────────────────────────────────────────────
 AUTO_POSTS = [
-    ("12:00", "Robi"),
-    ("12:10", "Airtel"),
-    ("12:20", "Banglalink"),
-    ("12:30", "Gramenphone"),
-    ("12:40", "Skitto"),
+    ("14:20", "Robi"),
+    ("14:30", "Airtel"),
+    ("14:40", "Banglalink"),
+    ("14:50", "Gramenphone"),
+    ("15:00", "Skitto"),
 ]
 
 _posted_today: set = set()  # tracks "HH:MM" already posted today
@@ -238,7 +240,7 @@ def post_to_page(message: str):
 
 def check_scheduled_post():
     global _last_post_date, _posted_today
-    now = datetime.now()
+    now = datetime.now(timezone.utc) + BD_TZ  # Bangladesh time
     today = now.date()
 
     # Reset tracker each new day
