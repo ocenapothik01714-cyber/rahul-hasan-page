@@ -176,6 +176,12 @@ def check_inbox(reply=True):
     for conv in conversations:
         messages = get_messages_in_conversation(conv["id"])
         conv_messages_map[conv["id"]] = messages
+
+        # If the last message is from the page, admin already handled it — skip
+        last_msg = messages[-1] if messages else None
+        if last_msg and last_msg.get("from", {}).get("id") == PAGE_ID:
+            continue
+
         for msg in reversed(messages):  # newest first
             mid = msg.get("id")
             sender_id = msg.get("from", {}).get("id", "")
