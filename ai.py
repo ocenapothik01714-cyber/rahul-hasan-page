@@ -22,6 +22,7 @@ _CLIENTS = [
 # Cooldown: if a key hits 429, skip it for this many seconds
 _COOLDOWN_SECS = 60
 _rate_limited_until: dict[int, float] = {}  # index → timestamp
+_next_client_index = 0  # round-robin pointer
 
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1yVTWR1iPQG9Ub43449Be8oVIbldr0F3oGcxGWwN6q44/export?format=csv&gid=0"
 
@@ -29,23 +30,63 @@ _cache = {"packages": {}, "fetched_at": 0}
 
 # Operator keyword mapping → sheet key
 OPERATOR_ALIASES = {
-    "robi":        "Robi",
-    "রবি":         "Robi",
-    "airtel":      "Airtel",
-    "এয়ারটেল":    "Airtel",
-    "banglalink":  "Banglalink",
-    "বাংলালিংক":  "Banglalink",
-    "bl":          "Banglalink",
-    "ryze":        "Ryze",
-    "রাইজ":        "Ryze",
-    "rise":        "Ryze",
-    "gp":          "Gramenphone",
-    "grameenphone":"Gramenphone",
-    "grameen":     "Gramenphone",
-    "জিপি":        "Gramenphone",
-    "গ্রামীণ":    "Gramenphone",
-    "skitto":      "Skitto",
-    "স্কিটো":     "Skitto",
+    # Robi
+    "robi":             "Robi",
+    "রবি":              "Robi",
+    "rbi":              "Robi",
+    "roby":             "Robi",
+
+    # Airtel
+    "airtel":           "Airtel",
+    "এয়ারটেল":         "Airtel",
+    "artl":             "Airtel",
+    "aitel":            "Airtel",
+    "airtle":           "Airtel",
+
+    # Banglalink
+    "banglalink":       "Banglalink",
+    "বাংলালিংক":        "Banglalink",
+    "bl":               "Banglalink",
+    "বি এল":            "Banglalink",
+    "বিএল":             "Banglalink",
+    "banlalink":        "Banglalink",
+    "bangla link":      "Banglalink",
+    "banglalik":        "Banglalink",
+
+    # Skitto
+    "skitto":           "Skitto",
+    "স্কিটো":           "Skitto",
+    "স্কিটু":           "Skitto",
+    "skito":            "Skitto",
+    "skiito":           "Skitto",
+    "skitoo":           "Skitto",
+
+    # Ryze
+    "ryze":             "Ryze",
+    "rise":             "Ryze",
+    "rize":             "Ryze",
+    "রাইজ":             "Ryze",
+    "রাইয":             "Ryze",
+    "raiz":             "Ryze",
+    "rais":             "Ryze",
+
+    # Grameenphone
+    "gp":               "Gramenphone",
+    "grameenphone":     "Gramenphone",
+    "grameen":          "Gramenphone",
+    "gramin":           "Gramenphone",
+    "geramin":          "Gramenphone",
+    "gramenphone":      "Gramenphone",
+    "gramienphone":     "Gramenphone",
+    "graminphone":      "Gramenphone",
+    "grameenphon":      "Gramenphone",
+    "graminephone":     "Gramenphone",
+    "জিপি":             "Gramenphone",
+    "গ্রামীণ":          "Gramenphone",
+    "গ্রামীণফোন":       "Gramenphone",
+    "গ্রামিনফোন":       "Gramenphone",
+    "গেরামিন":          "Gramenphone",
+    "গ্রামিন":          "Gramenphone",
 }
 
 
@@ -81,9 +122,18 @@ def detect_operator(text: str):
 
 
 def is_list_request(text: str) -> bool:
-    keywords = ["লিস্ট", "list", "প্যাকেজ দেন", "প্যাকেজ দেখান", "সব অফার",
-                "অফার লিস্ট", "কি কি আছে", "কী কী আছে", "দাম লিস্ট",
-                "প্যাকেজ কি কি", "সব প্যাকেজ", "অফার দেখান"]
+    keywords = [
+        # Bengali
+        "লিস্ট", "প্যাকেজ দেন", "প্যাকেজ দেখান", "প্যাকেজ কি কি", "সব প্যাকেজ",
+        "অফার লিস্ট", "অফার দেখান", "সব অফার", "অফার আছে", "কি অফার",
+        "কি কি আছে", "কী কী আছে", "দাম লিস্ট", "দাম কত", "দাম দেখান",
+        # Romanized Bengali
+        "ki offer", "koto dam", "dam koto", "offer ache", "ki ache",
+        "ki package", "package ache", "dekhan", "dekhao", "dam dao",
+        "ki ki ache", "offer dao", "package dao", "list dao",
+        # English
+        "offer list", "what offer", "package list", "price list",
+    ]
     text_lower = text.lower()
     return any(kw in text_lower for kw in keywords)
 
@@ -107,12 +157,23 @@ BASE_PROMPT = """\
 নোট: "চেক"=নম্বর চেক আগে, "অল"=সব নম্বরে, "গিফট"=গিফট নম্বর থেকে।
 
 নিয়ম:
-- বাংলায় লিখলে বাংলায়, ইংরেজিতে লিখলে ইংরেজিতে উত্তর দাও। Banglish বুঝতে না পারলে বলো বাংলা বা ইংরেজিতে লিখতে।
+- ভাষা নিয়ম: বাংলায় লিখলে বাংলায় উত্তর দাও। শুধুমাত্র পুরো মেসেজটা ইংরেজিতে হলে (৩+ ইংরেজি শব্দ) ইংরেজিতে উত্তর দাও।
+- রোমান হরফে বাংলা (যেমন: "ki offer ache", "koto dam", "dekhan to") → এটা বাংলা, বাংলায় উত্তর দাও।
 - উত্তর ২-৩ লাইনের মধ্যে রাখো।
-- প্যাকেজের তথ্য শুধু দেওয়া তালিকা থেকে নাও, বানাবে না।
+- প্যাকেজের তথ্য শুধু দেওয়া তালিকা থেকে নাও, বানাবে না। তালিকায় না থাকলে বলো "এই অফারটি এখন নেই"।
+- কখনো "আমি ভুল করেছি" বা "sorry" বলবে না — শুধু সঠিক তথ্য দাও।
 - পেমেন্ট নম্বর শুধু কিনতে চাইলে দাও।
 - পেমেন্ট করেছে বললে: শেষ ৪ ডিজিট না থাকলে চাও → অফার নম্বর না থাকলে চাও → দুটো পেলে বলো "অপেক্ষা করুন, আমরা চালু করে দিব 🙏"
 - সমস্যা বা জোরাজুরি হলে বলো: "কল করুন: 01931112866"
+- AI বা বট পরিচয় দেবে না। কোনো markdown ব্যবহার করবে না।"""
+
+
+COMMENT_PROMPT = """\
+তুমি Rahul Hasan Offer Point-এর কাস্টমার সার্ভিস। মোবাইল ডেটা/মিনিট/কম্বো প্যাক বিক্রি করি। রাজশাহী, বাংলাদেশ।
+নিয়ম:
+- কমেন্টের উত্তর ১-২ লাইনে দাও, বন্ধুত্বপূর্ণভাবে।
+- বিস্তারিত দাম বা অফার বলবে না — ইনবক্সে মেসেজ করতে বলো।
+- বাংলায় বা রোমান হরফে বাংলা লিখলে বাংলায় উত্তর দাও। পুরো মেসেজ ইংরেজি হলে ইংরেজিতে উত্তর দাও।
 - AI বা বট পরিচয় দেবে না। কোনো markdown ব্যবহার করবে না।"""
 
 
@@ -125,11 +186,15 @@ def build_prompt(operator_key=None) -> str:
 # ─── Shared chat with key/model rotation ──────────────────────────────────────
 
 def _chat(messages: list, max_tokens: int, temperature: float) -> str:
-    """Try clients in order; skip ones still in cooldown. On 429, mark cooldown and try next."""
+    """Round-robin across clients; skip ones in cooldown. On 429, mark cooldown and try next."""
+    global _next_client_index
     now = time.time()
-    for i, (client, model) in enumerate(_CLIENTS):
+    n = len(_CLIENTS)
+    for attempt in range(n):
+        i = (_next_client_index + attempt) % n
+        client, model = _CLIENTS[i]
         if now < _rate_limited_until.get(i, 0):
-            logger.info("Skipping %s (rate-limited, %.0fs left)", model,
+            logger.info("Skipping key %d (rate-limited, %.0fs left)", i,
                         _rate_limited_until[i] - now)
             continue
         try:
@@ -139,12 +204,13 @@ def _chat(messages: list, max_tokens: int, temperature: float) -> str:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            _next_client_index = (i + 1) % n  # advance pointer on success
             return resp.choices[0].message.content.strip()
         except Exception as e:
             err = str(e)
             if "429" in err or "rate_limit" in err.lower():
                 _rate_limited_until[i] = time.time() + _COOLDOWN_SECS
-                logger.warning("Rate limit on %s — cooldown %ds", model, _COOLDOWN_SECS)
+                logger.warning("Rate limit on key %d — cooldown %ds", i, _COOLDOWN_SECS)
                 continue
             if "413" in err or "too large" in err.lower():
                 logger.warning("Payload too large for %s, trying next client...", model)
@@ -156,26 +222,38 @@ def _chat(messages: list, max_tokens: int, temperature: float) -> str:
 # ─── Reply generators ──────────────────────────────────────────────────────────
 
 def generate_comment_reply(comment_text: str, post_text: str = "") -> str:
-    operator = detect_operator(comment_text)
-    context = f'Post: "{post_text[:200]}"\n' if post_text else ""
+    context = f'Post: "{post_text[:150]}"\n' if post_text else ""
     try:
         return _chat(
             messages=[
-                {"role": "system", "content": build_prompt(operator)},
-                {"role": "user", "content": f"এই কমেন্টের উত্তর দাও।\n{context}Comment: \"{comment_text}\""},
+                {"role": "system", "content": COMMENT_PROMPT},
+                {"role": "user", "content": f"{context}Comment: \"{comment_text}\""},
             ],
-            max_tokens=250,
-            temperature=0.8,
+            max_tokens=120,
+            temperature=0.7,
         )
     except Exception as e:
         logger.error("Groq comment reply failed: %s", e)
-        return "ধন্যবাদ আপনার মন্তব্যের জন্য! 😊"
+        return "ধন্যবাদ! বিস্তারিত জানতে ইনবক্সে মেসেজ করুন। 😊"
 
+
+_ENGLISH_WORDS = {
+    "the", "is", "are", "was", "were", "have", "has", "do", "does", "did",
+    "will", "would", "can", "could", "should", "what", "how", "when", "where",
+    "who", "which", "this", "that", "and", "or", "but", "for", "with", "from",
+    "want", "need", "get", "give", "send", "buy", "price", "offer", "package",
+    "please", "thank", "yes", "no", "not", "my", "your", "we", "they", "it",
+}
 
 def _is_english(text: str) -> bool:
-    english_chars = sum(1 for c in text if ord(c) < 128 and c.isalpha())
-    total_chars = sum(1 for c in text if c.isalpha())
-    return total_chars > 0 and english_chars / total_chars > 0.8
+    # If contains Bengali unicode → definitely Bengali
+    if any(ord(c) > 2000 for c in text):
+        return False
+    words = text.lower().split()
+    # Require more than 2 words and at least one real English word
+    if len(words) <= 2:
+        return False
+    return any(w in _ENGLISH_WORDS for w in words)
 
 
 def generate_inbox_reply(user_message: str, history: list = None) -> str:

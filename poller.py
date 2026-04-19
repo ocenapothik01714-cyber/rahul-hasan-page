@@ -9,7 +9,7 @@ Usage:
 import time
 import logging
 import requests
-from datetime import datetime, timezone
+from datetime import datetime
 from config import PAGE_ACCESS_TOKEN, PAGE_ID
 from ai import (generate_comment_reply, generate_inbox_reply,
                 is_list_request, detect_operator,
@@ -24,11 +24,17 @@ logger = logging.getLogger(__name__)
 GRAPH = "https://graph.facebook.com/v25.0"
 POLL_INTERVAL = 15  # seconds between each check
 
-# ── Daily auto-post config ─────────────────────────────────────────────────────
-AUTO_POST_TIME = "17:39"       # HH:MM — time to post every day
-AUTO_POST_OPERATOR = "Banglalink"  # operator key from sheet
+# ── Daily auto-post schedule ───────────────────────────────────────────────────
+AUTO_POSTS = [
+    ("12:00", "Robi"),
+    ("12:10", "Airtel"),
+    ("12:20", "Banglalink"),
+    ("12:30", "Gramenphone"),
+    ("12:40", "Skitto"),
+]
 
-_last_post_date = None  # tracks which date we already posted
+_posted_today: set = set()  # tracks "HH:MM" already posted today
+_last_post_date = None
 
 # Remember what we already replied to (in-memory, resets on restart)
 replied_comments: set = set()
@@ -82,38 +88,6 @@ def reply_to_comment(comment_id, message):
         logger.error("Failed comment reply %s: %s", comment_id, resp.text)
 
 
-def format_comment_time(iso_str):
-    """Convert Facebook ISO timestamp to a readable local string."""
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%d %b %Y at %I:%M %p UTC")
-    except Exception:
-        return iso_str
-
-
-def build_inbox_dm(post, comment):
-    """Build the DM text sent to a commenter via Messenger."""
-    post_text = post.get("message") or post.get("story") or "(no text)"
-    # Trim long posts
-    if len(post_text) > 200:
-        post_text = post_text[:200] + "..."
-
-    comment_text = comment.get("message", "")
-    comment_time = format_comment_time(comment.get("created_time", ""))
-    commenter_name = comment.get("from", {}).get("name", "আপনি")
-    post_id = post.get("id", "")
-
-    return (
-        f"হ্যালো {commenter_name}! 👋\n\n"
-        f"আপনি আমাদের একটি পোস্টে মন্তব্য করেছেন। এখানে বিস্তারিত:\n\n"
-        f"📌 পোস্ট ID: {post_id}\n"
-        f"📝 পোস্টের বিষয়বস্তু:\n{post_text}\n\n"
-        f"💬 আপনার মন্তব্য: \"{comment_text}\"\n"
-        f"🕒 মন্তব্যের সময়: {comment_time}\n\n"
-        f"আপনার মতামতের জন্য অসংখ্য ধন্যবাদ! আমাদের পেজে সাথে থাকুন। ❤️"
-    )
-
-
 def check_comments(reply=True):
     posts = get_recent_posts()
     for post in posts:
@@ -130,25 +104,11 @@ def check_comments(reply=True):
                 post_text = post.get("message") or post.get("story") or ""
                 comment_text = comment.get("message", "")
                 ai_reply = generate_comment_reply(comment_text, post_text)
-                full_reply = ai_reply + "\n\n💬 বিস্তারিত জানতে আমাদের মেসেজ করুন 👉 m.me/" + PAGE_ID
+                full_reply = ai_reply + "\n\n📩 বিস্তারিত জানতে আমাদের ইনবক্সে মেসেজ করুন।"
                 reply_to_comment(cid, full_reply)
 
 
-# ─── Messenger send (shared by comment DM + inbox reply) ──────────────────────
-
-def send_private_reply(comment_id, message):
-    """Send a Messenger private reply to a commenter via the Private Reply API.
-    Uses comment_id (not user ID) — works without a prior PSID."""
-    resp = requests.post(
-        f"{GRAPH}/{comment_id}/private_replies",
-        data={"message": message, "access_token": PAGE_ACCESS_TOKEN},
-        timeout=10,
-    )
-    if resp.ok:
-        logger.info("Sent private reply to comment %s", comment_id)
-    else:
-        logger.error("Failed private reply to comment %s: %s", comment_id, resp.text)
-
+# ─── Messenger send ────────────────────────────────────────────────────────────
 
 def send_message(recipient_id, message):
     resp = requests.post(
@@ -279,28 +239,39 @@ def post_to_page(message: str):
 
 
 def check_scheduled_post():
-    global _last_post_date
+    global _last_post_date, _posted_today
     now = datetime.now()
     today = now.date()
-    if _last_post_date == today:
-        return  # already posted today
-    if now.strftime("%H:%M") < AUTO_POST_TIME:
-        return  # not time yet
+
+    # Reset tracker each new day
+    if _last_post_date != today:
+        _posted_today = set()
+        _last_post_date = today
+
+    current_time = now.strftime("%H:%M")
 
     from ai import fetch_packages
-    pkgs = fetch_packages()
-    if AUTO_POST_OPERATOR not in pkgs:
-        logger.warning("Scheduled post: operator %s not in sheet", AUTO_POST_OPERATOR)
-        return
+    for post_time, operator in AUTO_POSTS:
+        if post_time in _posted_today:
+            continue
+        if current_time < post_time:
+            continue
 
-    date_str = now.strftime("%d %B %Y")
-    message = (
-        f"আজকের {AUTO_POST_OPERATOR} অফার ({date_str})\n\n"
-        f"{pkgs[AUTO_POST_OPERATOR]}\n\n"
-        f"অর্ডার করতে মেসেজ করুন 👉 m.me/{PAGE_ID}"
-    )
-    post_to_page(message)
-    _last_post_date = today
+        pkgs = fetch_packages()
+        if operator not in pkgs:
+            logger.warning("Scheduled post: operator %s not in sheet", operator)
+            _posted_today.add(post_time)
+            continue
+
+        date_str = now.strftime("%d %B %Y")
+        message = (
+            f"আজকের {operator} অফার ({date_str})\n\n"
+            f"{pkgs[operator]}\n\n"
+            f"অর্ডার করতে ইনবক্সে মেসেজ করুন 📩"
+        )
+        post_to_page(message)
+        _posted_today.add(post_time)
+        logger.info("Auto-posted %s offer.", operator)
 
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
@@ -320,7 +291,8 @@ def main():
     )
 
     logger.info("Polling every %ds. Press Ctrl+C to stop.", POLL_INTERVAL)
-    logger.info("Auto-post scheduled: %s at %s daily.", AUTO_POST_OPERATOR, AUTO_POST_TIME)
+    for t, op in AUTO_POSTS:
+        logger.info("Auto-post scheduled: %s at %s daily.", op, t)
     while True:
         time.sleep(POLL_INTERVAL)
         try:
