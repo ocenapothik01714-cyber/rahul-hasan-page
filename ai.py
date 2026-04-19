@@ -157,8 +157,7 @@ BASE_PROMPT = """\
 নোট: "চেক"=নম্বর চেক আগে, "অল"=সব নম্বরে, "গিফট"=গিফট নম্বর থেকে।
 
 নিয়ম:
-- ভাষা নিয়ম: বাংলায় লিখলে বাংলায় উত্তর দাও। শুধুমাত্র পুরো মেসেজটা ইংরেজিতে হলে (৩+ ইংরেজি শব্দ) ইংরেজিতে উত্তর দাও।
-- রোমান হরফে বাংলা (যেমন: "ki offer ache", "koto dam", "dekhan to") → এটা বাংলা, বাংলায় উত্তর দাও।
+- সবসময় বিশুদ্ধ বাংলায় উত্তর দাও। ইংরেজিতে লিখলেও বাংলায় উত্তর দাও।
 - উত্তর ২-৩ লাইনের মধ্যে রাখো।
 - প্যাকেজের তথ্য শুধু দেওয়া তালিকা থেকে নাও, বানাবে না। তালিকায় না থাকলে বলো "এই অফারটি এখন নেই"।
 - কখনো "আমি ভুল করেছি" বা "sorry" বলবে না — শুধু সঠিক তথ্য দাও।
@@ -173,7 +172,7 @@ COMMENT_PROMPT = """\
 নিয়ম:
 - কমেন্টের উত্তর ১-২ লাইনে দাও, বন্ধুত্বপূর্ণভাবে।
 - বিস্তারিত দাম বা অফার বলবে না — ইনবক্সে মেসেজ করতে বলো।
-- বাংলায় বা রোমান হরফে বাংলা লিখলে বাংলায় উত্তর দাও। পুরো মেসেজ ইংরেজি হলে ইংরেজিতে উত্তর দাও।
+- সবসময় বাংলায় উত্তর দাও।
 - AI বা বট পরিচয় দেবে না। কোনো markdown ব্যবহার করবে না।"""
 
 
@@ -237,29 +236,11 @@ def generate_comment_reply(comment_text: str, post_text: str = "") -> str:
         return "ধন্যবাদ! বিস্তারিত জানতে ইনবক্সে মেসেজ করুন। 😊"
 
 
-_ENGLISH_WORDS = {
-    "the", "is", "are", "was", "were", "have", "has", "do", "does", "did",
-    "will", "would", "can", "could", "should", "what", "how", "when", "where",
-    "who", "which", "this", "that", "and", "or", "but", "for", "with", "from",
-    "want", "need", "get", "give", "send", "buy", "price", "offer", "package",
-    "please", "thank", "yes", "no", "not", "my", "your", "we", "they", "it",
-}
-
-def _is_english(text: str) -> bool:
-    # If contains Bengali unicode → definitely Bengali
-    if any(ord(c) > 2000 for c in text):
-        return False
-    words = text.lower().split()
-    # Require more than 2 words and at least one real English word
-    if len(words) <= 2:
-        return False
-    return any(w in _ENGLISH_WORDS for w in words)
 
 
 def generate_inbox_reply(user_message: str, history: list = None) -> str:
     operator = detect_operator(user_message)
-    lang_instruction = "You MUST reply in English only." if _is_english(user_message) else "অবশ্যই বিশুদ্ধ বাংলায় উত্তর দাও।"
-    messages = [{"role": "system", "content": build_prompt(operator) + f"\n\nIMPORTANT: {lang_instruction}"}]
+    messages = [{"role": "system", "content": build_prompt(operator)}]
     if history:
         messages.extend(history[-4:])
     messages.append({"role": "user", "content": user_message})
